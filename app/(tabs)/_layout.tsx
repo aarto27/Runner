@@ -3,7 +3,7 @@ import { Tabs } from "expo-router";
 import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React from "react";
 import Colors from "@/constants/colors";
@@ -11,7 +11,7 @@ import Colors from "@/constants/colors";
 function NativeTabLayout() {
   return (
     <NativeTabs>
-      <NativeTabs.Trigger name="map">
+      <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "map", selected: "map.fill" }} />
         <Label>Map</Label>
       </NativeTabs.Trigger>
@@ -32,7 +32,6 @@ function NativeTabLayout() {
 }
 
 function ClassicTabLayout() {
-  const safeAreaInsets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const isIOS = Platform.OS === "ios";
 
@@ -59,7 +58,7 @@ function ClassicTabLayout() {
       }}
     >
       <Tabs.Screen
-        name="map"
+        name="index"
         options={{
           title: "Map",
           tabBarIcon: ({ color, size }) => (
