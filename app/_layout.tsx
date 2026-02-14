@@ -16,6 +16,7 @@ import {
   Rubik_700Bold,
 } from "@expo-google-fonts/rubik";
 
+
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
