@@ -46,11 +46,31 @@ function ActivityCard({ item, index }: { item: Activity; index: number }) {
             <Text style={styles.cardStatValue}>{formatDuration(item.duration)}</Text>
             <Text style={styles.cardStatLabel}>Time</Text>
           </View>
-          <View style={styles.cardStat}>
-            <Text style={[styles.cardStatValue, { color: Colors.dark.xp }]}>+{item.xpEarned}</Text>
-            <Text style={styles.cardStatLabel}>XP</Text>
-          </View>
+          {item.steps && item.steps > 0 && item.type !== 'cycle' ? (
+            <View style={styles.cardStat}>
+              <Text style={styles.cardStatValue}>{item.steps.toLocaleString()}</Text>
+              <Text style={styles.cardStatLabel}>Steps</Text>
+            </View>
+          ) : (
+            <View style={styles.cardStat}>
+              <Text style={[styles.cardStatValue, { color: Colors.dark.xp }]}>+{item.xpEarned}</Text>
+              <Text style={styles.cardStatLabel}>XP</Text>
+            </View>
+          )}
         </View>
+
+        {item.steps && item.steps > 0 && item.type !== 'cycle' && (
+          <View style={styles.stepsXpRow}>
+            <View style={styles.stepsXpItem}>
+              <Ionicons name="footsteps" size={13} color={Colors.dark.textSecondary} />
+              <Text style={styles.stepsXpText}>{item.steps.toLocaleString()} steps</Text>
+            </View>
+            <View style={styles.stepsXpItem}>
+              <Ionicons name="star" size={13} color={Colors.dark.xp} />
+              <Text style={[styles.stepsXpText, { color: Colors.dark.xp }]}>+{item.xpEarned} XP</Text>
+            </View>
+          </View>
+        )}
 
         {item.territoryId && (
           <View style={styles.territoryBadge}>

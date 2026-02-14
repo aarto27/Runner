@@ -21,6 +21,7 @@ export interface Activity {
   route: GpsPoint[];
   territoryId?: string;
   xpEarned: number;
+  steps?: number;
 }
 
 export interface Territory {

@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Text, Pressable, Platform, Alert } from 'react-native';
+import { View, StyleSheet, Text, Pressable, Platform, Alert, Linking } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, FadeIn } from 'react-native-reanimated';
+import { Pedometer } from 'expo-sensors';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useApp } from '@/lib/app-context';
 import Colors from '@/constants/colors';
 import { GpsPoint, ActivityType } from '@/lib/types';
@@ -18,11 +19,14 @@ const ACTIVITY_OPTIONS: { type: ActivityType; icon: string; iconSet: 'ionicons' 
   { type: 'hike', icon: 'hiking', iconSet: 'mci', label: 'Hike' },
 ];
 
+type PermissionState = 'loading' | 'undetermined' | 'granted' | 'denied_can_ask' | 'denied_permanent';
+
 export default function TrackScreen() {
   const insets = useSafeAreaInsets();
   const { saveNewActivity } = useApp();
   const mapRef = useRef<any>(null);
   const locationSub = useRef<Location.LocationSubscription | null>(null);
+  const pedometerSub = useRef<{ remove: () => void } | null>(null);
 
   const [activityType, setActivityType] = useState<ActivityType>('run');
   const [isTracking, setIsTracking] = useState(false);
@@ -30,7 +34,9 @@ export default function TrackScreen() {
   const [route, setRoute] = useState<GpsPoint[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState(0);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [steps, setSteps] = useState(0);
+  const [pedometerAvailable, setPedometerAvailable] = useState(false);
+  const [permissionState, setPermissionState] = useState<PermissionState>('loading');
   const [isSaving, setIsSaving] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -57,31 +63,116 @@ export default function TrackScreen() {
   }));
 
   useEffect(() => {
-    (async () => {
-      if (Platform.OS === 'web') {
-        setHasPermission(true);
-        return;
-      }
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setHasPermission(status === 'granted');
-    })();
+    checkPermissions();
+    checkPedometer();
     return () => {
       if (locationSub.current) locationSub.current.remove();
+      if (pedometerSub.current) pedometerSub.current.remove();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  const checkPedometer = async () => {
+    if (Platform.OS === 'web') {
+      setPedometerAvailable(false);
+      return;
+    }
+    try {
+      const available = await Pedometer.isAvailableAsync();
+      setPedometerAvailable(available);
+    } catch {
+      setPedometerAvailable(false);
+    }
+  };
+
+  const checkPermissions = async () => {
+    if (Platform.OS === 'web') {
+      setPermissionState('granted');
+      return;
+    }
+
+    try {
+      const { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
+
+      if (status === 'granted') {
+        setPermissionState('granted');
+      } else if (status === 'denied' && !canAskAgain) {
+        setPermissionState('denied_permanent');
+      } else if (status === 'denied') {
+        setPermissionState('denied_can_ask');
+      } else {
+        setPermissionState('undetermined');
+      }
+    } catch {
+      setPermissionState('undetermined');
+    }
+  };
+
+  const requestLocationPermission = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        setPermissionState('granted');
+      } else if (!canAskAgain) {
+        setPermissionState('denied_permanent');
+      } else {
+        setPermissionState('denied_can_ask');
+      }
+    } catch {
+      setPermissionState('denied_can_ask');
+    }
+  };
+
+  const openSettings = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') {
+      try {
+        Linking.openSettings();
+      } catch {
+        Alert.alert('Settings', 'Please open your device settings and enable location for TerraRun.');
+      }
+    }
+  };
+
+  const startPedometer = async () => {
+    if (!pedometerAvailable || Platform.OS === 'web') return;
+
+    try {
+      const { status } = await Pedometer.requestPermissionsAsync();
+      if (status !== 'granted') return;
+
+      setSteps(0);
+      const sub = Pedometer.watchStepCount(result => {
+        setSteps(result.steps);
+      });
+      pedometerSub.current = sub;
+    } catch (e) {
+      console.error('Pedometer error:', e);
+    }
+  };
+
+  const stopPedometer = () => {
+    if (pedometerSub.current) {
+      pedometerSub.current.remove();
+      pedometerSub.current = null;
+    }
+  };
 
   const startTracking = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setRoute([]);
     setElapsed(0);
     setCurrentSpeed(0);
+    setSteps(0);
     setIsTracking(true);
     setIsPaused(false);
 
     timerRef.current = setInterval(() => {
       setElapsed(prev => prev + 1);
     }, 1000);
+
+    startPedometer();
 
     if (Platform.OS === 'web') {
       const genRoute = generateWebSimulation();
@@ -90,6 +181,7 @@ export default function TrackScreen() {
         if (idx < genRoute.length) {
           setRoute(prev => [...prev, genRoute[idx]]);
           setCurrentSpeed(genRoute[idx].speed || 0);
+          setSteps(prev => prev + Math.floor(Math.random() * 5) + 3);
           idx++;
         }
       }, 2000);
@@ -125,7 +217,7 @@ export default function TrackScreen() {
     } catch (e) {
       console.error('Location tracking error:', e);
     }
-  }, []);
+  }, [pedometerAvailable]);
 
   const pauseTracking = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -138,6 +230,7 @@ export default function TrackScreen() {
       locationSub.current.remove();
       locationSub.current = null;
     }
+    stopPedometer();
   }, []);
 
   const resumeTracking = useCallback(async () => {
@@ -146,6 +239,8 @@ export default function TrackScreen() {
     timerRef.current = setInterval(() => {
       setElapsed(prev => prev + 1);
     }, 1000);
+
+    startPedometer();
 
     if (Platform.OS !== 'web') {
       try {
@@ -167,12 +262,13 @@ export default function TrackScreen() {
         console.error('Resume tracking error:', e);
       }
     }
-  }, []);
+  }, [pedometerAvailable]);
 
   const stopTracking = useCallback(async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     if (timerRef.current) clearInterval(timerRef.current);
     if (locationSub.current) locationSub.current.remove();
+    stopPedometer();
     setIsTracking(false);
     setIsPaused(false);
 
@@ -183,31 +279,86 @@ export default function TrackScreen() {
 
     setIsSaving(true);
     try {
-      await saveNewActivity(route, activityType, elapsed);
+      await saveNewActivity(route, activityType, elapsed, steps);
       setRoute([]);
       setElapsed(0);
       setCurrentSpeed(0);
+      setSteps(0);
     } catch (e) {
       console.error('Save activity error:', e);
     } finally {
       setIsSaving(false);
     }
-  }, [route, activityType, elapsed, saveNewActivity]);
+  }, [route, activityType, elapsed, steps, saveNewActivity]);
 
   const distance = route.length > 1 ? calculateTotalDistance(route) : 0;
+  const showSteps = activityType !== 'cycle';
 
-  if (hasPermission === false) {
+  if (permissionState === 'loading') {
     return (
-      <View style={[styles.permContainer, { paddingTop: insets.top }]}>
-        <Ionicons name="location-outline" size={64} color={Colors.dark.textMuted} />
-        <Text style={styles.permTitle}>Location Access Required</Text>
-        <Text style={styles.permSub}>TerraRun needs your location to track activities and claim territories.</Text>
-        <Pressable style={styles.permBtn} onPress={async () => {
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          setHasPermission(status === 'granted');
-        }}>
-          <Text style={styles.permBtnText}>Enable Location</Text>
-        </Pressable>
+      <View style={[styles.permContainer, { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) }]}>
+        <Animated.View entering={FadeIn}>
+          <View style={styles.permLoadingDot} />
+        </Animated.View>
+      </View>
+    );
+  }
+
+  if (permissionState !== 'granted') {
+    return (
+      <View style={[styles.permContainer, { paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) }]}>
+        <Animated.View entering={FadeInDown.springify()} style={styles.permCard}>
+          <View style={styles.permIconCircle}>
+            <Ionicons name="location" size={36} color={Colors.dark.accent} />
+          </View>
+
+          <Text style={styles.permTitle}>Enable Location</Text>
+          <Text style={styles.permSub}>
+            TerraRun needs access to your location to track your activities, map your routes, and claim territories.
+          </Text>
+
+          <View style={styles.permFeatures}>
+            <View style={styles.permFeatureRow}>
+              <Ionicons name="navigate" size={18} color={Colors.dark.accent} />
+              <Text style={styles.permFeatureText}>Real-time GPS route tracking</Text>
+            </View>
+            <View style={styles.permFeatureRow}>
+              <Ionicons name="map" size={18} color={Colors.dark.info} />
+              <Text style={styles.permFeatureText}>Map your running routes</Text>
+            </View>
+            <View style={styles.permFeatureRow}>
+              <Ionicons name="flag" size={18} color={Colors.dark.warning} />
+              <Text style={styles.permFeatureText}>Claim territory with closed loops</Text>
+            </View>
+          </View>
+
+          {permissionState === 'denied_permanent' ? (
+            <>
+              <Text style={styles.permDeniedText}>
+                Location access was denied. Please enable it in your device settings to use TerraRun.
+              </Text>
+              <Pressable
+                style={({ pressed }) => [styles.permBtn, pressed && { opacity: 0.8 }]}
+                onPress={openSettings}
+              >
+                <Ionicons name="settings-outline" size={20} color={Colors.dark.background} />
+                <Text style={styles.permBtnText}>Open Settings</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              style={({ pressed }) => [styles.permBtn, pressed && { opacity: 0.8 }]}
+              onPress={requestLocationPermission}
+            >
+              <Ionicons name="location" size={20} color={Colors.dark.background} />
+              <Text style={styles.permBtnText}>Allow Location Access</Text>
+            </Pressable>
+          )}
+
+          <Text style={styles.permPrivacy}>
+            Your location data stays on your device and is never shared.
+          </Text>
+        </Animated.View>
       </View>
     );
   }
@@ -292,10 +443,24 @@ export default function TrackScreen() {
               <Text style={styles.statBigValue}>{formatDistance(distance)}</Text>
               <Text style={styles.statSmallLabel}>Distance</Text>
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statBigValue}>{formatSpeed(currentSpeed)}</Text>
-              <Text style={styles.statSmallLabel}>Speed</Text>
-            </View>
+            {showSteps ? (
+              <View style={styles.statBox}>
+                <Text style={styles.statBigValue}>{steps.toLocaleString()}</Text>
+                <Text style={styles.statSmallLabel}>Steps</Text>
+              </View>
+            ) : (
+              <View style={styles.statBox}>
+                <Text style={styles.statBigValue}>{formatSpeed(currentSpeed)}</Text>
+                <Text style={styles.statSmallLabel}>Speed</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {isTracking && showSteps && (
+          <View style={styles.speedRow}>
+            <Ionicons name="speedometer-outline" size={14} color={Colors.dark.textSecondary} />
+            <Text style={styles.speedRowText}>{formatSpeed(currentSpeed)}</Text>
           </View>
         )}
 
@@ -365,11 +530,19 @@ const mapDarkStyle = [
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.dark.background },
-  permContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.dark.background, padding: 40 },
-  permTitle: { color: Colors.dark.text, fontSize: 22, fontFamily: 'Rubik_600SemiBold', marginTop: 20, textAlign: 'center' },
-  permSub: { color: Colors.dark.textSecondary, fontSize: 15, textAlign: 'center', marginTop: 10, lineHeight: 22 },
-  permBtn: { backgroundColor: Colors.dark.accent, paddingHorizontal: 32, paddingVertical: 14, borderRadius: 30, marginTop: 24 },
+  permContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.dark.background, padding: 24 },
+  permLoadingDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.dark.accent },
+  permCard: { backgroundColor: Colors.dark.surface, borderRadius: 24, padding: 32, alignItems: 'center', width: '100%', maxWidth: 360 },
+  permIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.dark.accentGlow, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  permTitle: { color: Colors.dark.text, fontSize: 24, fontFamily: 'Rubik_700Bold', marginBottom: 10, textAlign: 'center' },
+  permSub: { color: Colors.dark.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  permFeatures: { width: '100%', gap: 14, marginBottom: 28 },
+  permFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  permFeatureText: { color: Colors.dark.text, fontSize: 14, fontFamily: 'Rubik_400Regular' },
+  permDeniedText: { color: Colors.dark.warning, fontSize: 13, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
+  permBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.dark.accent, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 30, width: '100%', justifyContent: 'center' },
   permBtnText: { color: Colors.dark.background, fontFamily: 'Rubik_600SemiBold', fontSize: 16 },
+  permPrivacy: { color: Colors.dark.textMuted, fontSize: 12, textAlign: 'center', marginTop: 16, lineHeight: 18 },
   preTrackContainer: { position: 'absolute', left: 16, right: 16 },
   activitySelector: { flexDirection: 'row', backgroundColor: 'rgba(10, 14, 23, 0.9)', borderRadius: 16, padding: 4, gap: 4 },
   activityOption: { flex: 1, flexDirection: 'column', alignItems: 'center', paddingVertical: 12, borderRadius: 12, gap: 4 },
@@ -378,10 +551,12 @@ const styles = StyleSheet.create({
   activityLabelActive: { color: Colors.dark.accent },
   startMarker: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.dark.accent, justifyContent: 'center', alignItems: 'center' },
   bottomPanel: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(10, 14, 23, 0.92)', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24 },
-  statsGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
+  statsGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   statBox: { alignItems: 'center', flex: 1 },
   statBigValue: { color: Colors.dark.text, fontSize: 22, fontFamily: 'Rubik_600SemiBold' },
   statSmallLabel: { color: Colors.dark.textSecondary, fontSize: 12, marginTop: 4 },
+  speedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 16 },
+  speedRowText: { color: Colors.dark.textSecondary, fontSize: 13, fontFamily: 'Rubik_400Regular' },
   controlRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 20 },
   mainBtn: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
   mainBtnStart: { backgroundColor: Colors.dark.accent },

@@ -12,7 +12,7 @@ interface AppContextValue {
   notifications: Notification[];
   isLoading: boolean;
   refreshData: () => Promise<void>;
-  saveNewActivity: (route: GpsPoint[], type: ActivityType, duration: number) => Promise<Activity>;
+  saveNewActivity: (route: GpsPoint[], type: ActivityType, duration: number, steps?: number) => Promise<Activity>;
   updateUsername: (name: string) => Promise<void>;
   markNotifRead: (id: string) => Promise<void>;
   unreadCount: number;
@@ -57,7 +57,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await loadData();
   }, [loadData]);
 
-  const saveNewActivity = useCallback(async (route: GpsPoint[], type: ActivityType, duration: number) => {
+  const saveNewActivity = useCallback(async (route: GpsPoint[], type: ActivityType, duration: number, steps?: number) => {
     const distance = calculateTotalDistance(route);
     const calories = calculateCalories(distance, type, duration);
     const speeds = route.filter(p => p.speed !== undefined).map(p => p.speed!);
@@ -76,6 +76,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       maxSpeed,
       route: simplifyRoute(route),
       xpEarned: 0,
+      steps: steps || 0,
     };
 
     let xpEarned = Math.round(distance / 100) + Math.round(duration / 60) * 2;
