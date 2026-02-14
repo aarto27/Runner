@@ -1,0 +1,301 @@
+Create a production-ready mobile fitness application similar to Strava but integrated with a real-time territory conquest gaming system.
+
+🏃 Core Concept
+
+The app should allow users to:
+
+Track running, jogging, cycling, walking, hiking
+
+After each activity, generate a GPS route map
+
+Automatically convert a closed GPS route into a territory polygon
+
+The area inside the closed track becomes the user’s claimed territory
+
+If another user completes a route that:
+
+Overlaps an existing territory
+
+Or fully encloses it
+
+And covers at least 60% of the area
+
+Then:
+
+The territory ownership transfers to the new user
+
+The previous owner loses that territory
+
+🔔 Mandatory Territory Steal Notification System (NEW REQUIREMENT)
+
+When a user’s territory is stolen:
+
+The previous owner must instantly receive:
+
+Push notification
+
+In-app real-time alert
+
+Notification stored in database
+
+Notification content example:
+
+“⚔️ Your territory in Mumbai has been conquered by @username”
+
+Show:
+
+Area lost
+
+Date & time
+
+Activity type used to conquer
+
+Link to view the new territory map
+
+Also notify the new owner:
+
+“🏆 You successfully conquered a territory!”
+
+Maintain:
+
+Territory conquest history log
+
+Timeline of attacks & defenses
+
+🌍 Real-Time Global Map System
+
+The app must include a full-screen interactive world map where:
+
+Users can zoom out and see the entire globe
+
+Each user’s claimed territories are color-coded
+
+Clicking on a territory shows:
+
+Owner name
+
+Total area
+
+Number of activities used to claim it
+
+Date of conquest
+
+Conquest history
+
+Include:
+
+Leaderboard overlay
+
+Heatmap mode
+
+Search by username
+
+Smooth animated transitions
+
+📱 Platforms
+
+iOS (SwiftUI)
+
+Android (Kotlin)
+
+Backend: Node.js + Express or NestJS
+
+Database: PostgreSQL + PostGIS
+
+Real-time updates: WebSockets or Firebase
+
+Maps: Google Maps SDK or Mapbox
+
+🔐 Authentication
+
+Email + Password
+
+Google login
+
+Apple login
+
+JWT authentication
+
+Secure password hashing (bcrypt)
+
+🗺️ Activity Tracking
+
+Real-time GPS tracking
+
+Live speed, distance, calories
+
+Pause/resume tracking
+
+Auto-detect activity type
+
+Route smoothing algorithm
+
+Detect closed loop routes
+
+Convert closed loop into geo-polygon
+
+🏴 Territory System Logic
+
+When activity ends:
+
+Validate polygon
+
+Calculate area
+
+Store polygon in PostGIS
+
+Use spatial indexing (R-tree)
+
+Check overlap using PostGIS intersection queries
+
+If overlap ≥ 60% → transfer ownership
+
+Trigger real-time notifications
+
+Update leaderboard rankings
+
+Maintain:
+
+Territory history table
+
+Conquest logs
+
+User XP updates
+
+Win/Loss ratio updates
+
+🏆 Gamification
+
+XP system
+
+Global leaderboard
+
+City leaderboard
+
+Badges:
+
+First Territory
+
+10 km Conqueror
+
+City King
+
+Country Dominator
+
+📊 Profile Screen
+
+Total distance
+
+Total conquered area
+
+Active territories
+
+Win/Loss ratio
+
+Activity history with map thumbnails
+
+🔔 Notifications System
+
+Push notification when:
+
+Territory stolen (both users notified)
+
+Territory defended
+
+New nearby conquest
+
+Achievement unlocked
+
+Must support:
+
+Real-time WebSocket events
+
+Background push delivery
+
+Notification history storage
+
+🧠 Backend Requirements
+
+PostGIS polygon overlap detection
+
+Efficient spatial indexing
+
+Conflict resolution algorithm
+
+Background job queue
+
+Rate limiting
+
+API security
+
+Anti-cheat GPS validation
+
+Detect fake GPS/spoofing
+
+🎨 UI/UX
+
+Modern UI inspired by Strava with gaming aesthetics.
+
+Dark mode default
+
+Smooth animations
+
+Map transitions
+
+Clean dashboard
+
+Highly responsive
+
+☁️ Infrastructure
+
+AWS or GCP deployment
+
+Dockerized services
+
+CI/CD pipeline
+
+Load balancing
+
+CDN
+
+Microservice architecture
+
+Monitoring with Prometheus + Grafana
+
+🔐 Security
+
+End-to-end encryption
+
+Secure API gateway
+
+GDPR-ready compliance
+
+Secure storage of GPS & personal data
+
+📦 Deliverables
+
+Fully functional mobile apps (iOS + Android)
+
+Admin panel
+
+REST + WebSocket API
+
+Production deployment guide
+
+Clean documented codebase
+
+Database schema
+
+Swagger API documentation
+
+🎯 Suggested App Names
+
+TerraRun
+
+ConquerFit
+
+GeoWar Fitness
+
+MapClaim
+
+RunEmpire
